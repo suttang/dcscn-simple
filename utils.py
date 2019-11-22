@@ -60,3 +60,36 @@ def resize_image(image_array, scale, resampling_method="bicubic"):
         image_array = image_array.reshape(new_height, new_width, 1)
 
     return image_array
+
+
+def add_summaries(
+    scope,
+    name,
+    value,
+    save_stddev=False,
+    save_mean=False,
+    save_max=False,
+    save_min=False,
+):
+    with tf.name_scope(scope):
+        mean = tf.reduce_mean(value)
+
+        if save_mean:
+            tf.summary.scalar("mean/{}".format(name), mean)
+        if save_stddev:
+            stddev = tf.sqrt(tf.reduce_mean(tf.square(value - mean)))
+            tf.summary.scalar("stddev/{}".format(name), stddev)
+        if save_max:
+            tf.summary.scalar("max/{}".format(name), tf.reduce_max(value))
+        if save_max:
+            tf.summary.scalar("min/{}".format(name), tf.reduce_max(value))
+
+        tf.summary.histogram(name, value)
+
+
+def calc_psnr(mse, max_value=255.0):
+    if mse is None or mse == float("Inf") or mse == 0:
+        psnr = 0
+    else:
+        psnr = 20 * math.log(max_value / math.sqrt(mse), 10)
+    return psnr

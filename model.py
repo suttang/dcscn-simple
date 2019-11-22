@@ -4,6 +4,7 @@ import math
 import tensorflow as tf
 
 import dataset
+from utils import add_summaries
 
 
 class Dcscn:
@@ -119,12 +120,25 @@ class Dcscn:
                 input, w, stride=1, bias=b, use_batch_norm=use_batch_norm, name=name
             )
 
-            if dropout_rate < 1.0:
-                z = tf.nn.dropout(z, dropout, name="dropout")
-
             a = self._prelu(z, output_feature_num, name=name)
 
+            if dropout_rate < 1.0:
+                a = tf.nn.dropout(a, dropout, name="dropout")
+
             self.H.append(a)
+
+            add_summaries("weight", name, w, save_stddev=True, save_mean=True)
+            add_summaries("output", name, a, save_stddev=True, save_mean=True)
+            add_summaries("bias", name, b, save_stddev=True, save_mean=True)
+
+            # # Save image
+            # shapes = w.get_shape().as_list()
+            # weights = tf.reshape(w, [shapes[0], shapes[1], shapes[2] * shapes[3]])
+            # weights_transposed = tf.transpose(weights, [2, 0, 1])
+            # weights_transposed = tf.reshape(
+            #     weights_transposed, [shapes[2] * shapes[3], shapes[0], shapes[1], 1]
+            # )
+            # tf.summary.image("weights", weights_transposed, max_outputs=6)
 
         self.Weights.append(w)
         self.Biases.append(b)
@@ -168,6 +182,12 @@ class Dcscn:
         total_output_feature_num = 0
         input_feature_num = self.input_channel
         input_tensor = x
+
+        with tf.name_scope("X_"):
+            mean_var = tf.reduce_mean(x)
+            stddev_var = tf.sqrt(tf.reduce_mean(tf.square(x - mean_var)))
+            tf.summary.scalar("output/mean", mean_var)
+            tf.summary.scalar("output/stddev", stddev_var)
 
         for i in range(self.layers):
             if self.min_filters != 0 and i > 0:
@@ -253,6 +273,13 @@ class Dcscn:
 
         y_hat = tf.add(self.H[-1], x2, name="output")
 
+        with tf.name_scope("Y_"):
+            mean = tf.reduce_mean(y_hat)
+            stddev = tf.sqrt(tf.reduce_mean(tf.square(y_hat - mean)))
+            tf.summary.scalar("output/mean", mean)
+            tf.summary.scalar("output/stddev", stddev)
+            tf.summary.histogram("output", y_hat)
+
         return y_hat
 
     def loss(self, y_hat, y):
@@ -265,7 +292,8 @@ class Dcscn:
         l2_norm_loss = self.l2_decay + tf.add_n(l2_norm_losses)
         loss = image_loss + l2_norm_loss
 
-        tf.summary.scalar("loss", loss)
+        tf.summary.scalar("Loss", loss)
+        tf.summary.scalar("L2WeightDecayLoss", l2_norm_loss)
 
         return loss, image_loss, mse
 
@@ -300,17 +328,14 @@ class Dcscn:
             var = grads[i]
             mean_var = tf.reduce_mean(var)
             stddev_var = tf.sqrt(tf.reduce_mean(tf.square(var - mean_var)))
-            tf.summary.scalar("{}/mean".format(var.name), var)
-            tf.summary.scalar("{}/stddev".format(grads[i].name), stddev_var)
-            tf.summary.histogram(grads[i].name, var)
+
+            # tf.summary.scalar("{}/mean".format(var.name), var)
+            # tf.summary.scalar("{}/stddev".format(grads[i].name), stddev_var)
+            # tf.summary.histogram(grads[i].name, var)
 
         return training_optimizer
 
     def train(self, input, label):
-        sess = tf.Session()
-
-        log_dir = datetime.now().strftime("%Y%m%d%H%M%S")
-        writer = tf.summary.FileWriter("logs/{}".format(log_dir), graph=sess.graph)
 
         x, y, x2, learning_rate, dropout, is_training = self.placeholders(
             input_channel=self.input_channel, output_channel=self.output_channel
@@ -326,23 +351,52 @@ class Dcscn:
             "bsd200", scale=self.scale, image_size=48, batch_size=self.batch_size
         )
 
-        sess.run(tf.global_variables_initializer())
+        summary = tf.summary.merge_all()
 
-        for i in range(100):
-            input_images, upscaled_images, original_images = loader.feed()
+        with tf.Session() as sess:
+            log_dir = datetime.now().strftime("%Y%m%d%H%M%S")
+            writer = tf.summary.FileWriter("logs/{}".format(log_dir), graph=sess.graph)
 
-            feed_dict = {
-                x: input_images,
-                x2: upscaled_images,
-                y: original_images,
-                learning_rate: self.learning_rate,
-                dropout: self.dropout_rate,
-                is_training: 1,
-            }
+            sess.run(tf.global_variables_initializer())
 
-            sess.run([training, loss, mse], feed_dict=feed_dict)
+            for i in range(200):
+                input_images, upscaled_images, original_images = loader.feed()
 
-            print("Step: {}".format(i))
+                feed_dict = {
+                    x: input_images,
+                    x2: upscaled_images,
+                    y: original_images,
+                    learning_rate: self.learning_rate,
+                    dropout: self.dropout_rate,
+                    is_training: 1,
+                }
 
-        writer.close()
-        sess.close()
+                _, summarized, s_loss, s_mse = sess.run(
+                    [training, summary, loss, mse], feed_dict=feed_dict
+                )
+                writer.add_summary(summarized, i)
+
+                # Learning rate
+                lr_summary = tf.Summary(
+                    value=[tf.Summary.Value(tag="LR", simple_value=self.learning_rate)]
+                )
+                writer.add_summary(lr_summary, i)
+
+                def log_scalar_value(writer, name, value, step):
+                    summary = tf.Summary(
+                        value=[tf.Summary.Value(tag=name, simple_value=value)]
+                    )
+                    writer.add_summary(summary, step)
+
+                print("Step: {}, loss: {}, mse: {}".format(i, s_loss, s_mse))
+
+            writer.close()
+
+    def predict(self, input_image):
+        h, w = input_image.shape[:2]
+
+    def save(self):
+        pass
+
+    def load(self):
+        pass
