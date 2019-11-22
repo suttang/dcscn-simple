@@ -335,15 +335,14 @@ class Dcscn:
 
         return training_optimizer
 
-    def train(self, label):
-
+    def train(self):
         x, y, x2, learning_rate, dropout, is_training = self.placeholders(
             input_channel=self.input_channel, output_channel=self.output_channel
         )
 
         # then you can use self.H_concat
         y_hat = self.forward(x, x2, dropout)
-        loss, image_loss, mse = self.loss(y_hat, label)
+        loss, image_loss, mse = self.loss(y_hat, y)
 
         training = self.optimizer(loss, learning_rate)
 
