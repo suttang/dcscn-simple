@@ -381,12 +381,6 @@ class Dcscn:
                 )
                 writer.add_summary(lr_summary, i)
 
-                def log_scalar_value(writer, name, value, step):
-                    summary = tf.Summary(
-                        value=[tf.Summary.Value(tag=name, simple_value=value)]
-                    )
-                    writer.add_summary(summary, step)
-
                 print("Step: {}, loss: {}, mse: {}".format(i, s_loss, s_mse))
 
             writer.close()
