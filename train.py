@@ -9,7 +9,7 @@ def main():
 
     model = Dcscn()
 
-    model.train(inputs, labels)
+    model.train(labels)
 
 
 if __name__ == "__main__":

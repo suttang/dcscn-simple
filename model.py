@@ -335,7 +335,7 @@ class Dcscn:
 
         return training_optimizer
 
-    def train(self, input, label):
+    def train(self, label):
 
         x, y, x2, learning_rate, dropout, is_training = self.placeholders(
             input_channel=self.input_channel, output_channel=self.output_channel
