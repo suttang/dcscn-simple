@@ -388,9 +388,9 @@ class Dcscn:
 
             writer.close()
 
-    def inference(self, input, output_dir):
+    def inference(self, input_image, output_dir):
         # Convert image to Y
-        input_y_image = convert_rgb_to_y(input)
+        input_y_image = convert_rgb_to_y(input_image)
         scaled_y_image = resize_image(input_y_image, self.scale)
 
         save_image(scaled_y_image, "{}/bicubic_y.jpg".format(output_dir), is_rgb=False)
@@ -399,10 +399,30 @@ class Dcscn:
             input_channel=self.input_channel, output_channel=self.output_channel
         )
 
+        h, w = input_y_image.shape[:2]
+        ch = input_y_image.shape[2] if len(input_y_image.shape) > 2 else 1
+
         with tf.Session() as sess:
+            predict = self.forward(x, x2, dropout)
             sess.run(tf.global_variables_initializer())
-            # feed_dict = {x: input_y_image.reshape(1, h, w, ch)}
-            # y_hat = sess.run([self.forward], feed_dict={})
+            feed_dict = {
+                x: input_y_image.reshape(1, h, w, ch),
+                x2: scaled_y_image.reshape(
+                    1,
+                    self.scale * input_y_image.shape[0],
+                    self.scale * input_y_image.shape[1],
+                    ch,
+                ),
+                learning_rate: self.learning_rate,
+                dropout: 1.0,
+                is_training: 0,
+            }
+            y_hat = sess.run([predict], feed_dict=feed_dict)
+            output_y_image = y_hat[0][0]
+
+        # Save output image
+        save_image(output_y_image, "{}/result_y.jpg".format(output_dir), is_rgb=False)
+
         # y_hat = self.forward()
 
         pass
