@@ -5,17 +5,9 @@ import random
 
 import numpy as np
 
-from utils import load_image, resize_image
-
-
-def convert_rgb_to_y(image):
-    if len(image.shape) <= 2 or image.shape[2] == 1:
-        return image
-
-    xform = np.array([[65.738 / 256.0, 129.057 / 256.0, 25.064 / 256.0]])
-    y_image = image.dot(xform.T) + 16.0
-
-    return y_image
+from utils import load_image
+from utils import resize_image
+from utils import convert_rgb_to_y
 
 
 class Loader:

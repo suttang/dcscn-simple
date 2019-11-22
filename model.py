@@ -5,6 +5,9 @@ import tensorflow as tf
 
 import dataset
 from utils import add_summaries
+from utils import convert_rgb_to_y
+from utils import resize_image
+from utils import save_image
 
 
 class Dcscn:
@@ -385,8 +388,24 @@ class Dcscn:
 
             writer.close()
 
-    def predict(self, input_image):
-        h, w = input_image.shape[:2]
+    def inference(self, input, output_dir):
+        # Convert image to Y
+        input_y_image = convert_rgb_to_y(input)
+        scaled_y_image = resize_image(input_y_image, self.scale)
+
+        save_image(scaled_y_image, "{}/bicubic_y.jpg".format(output_dir), is_rgb=False)
+
+        x, y, x2, learning_rate, dropout, is_training = self.placeholders(
+            input_channel=self.input_channel, output_channel=self.output_channel
+        )
+
+        with tf.Session() as sess:
+            sess.run(tf.global_variables_initializer())
+            # feed_dict = {x: input_y_image.reshape(1, h, w, ch)}
+            # y_hat = sess.run([self.forward], feed_dict={})
+        # y_hat = self.forward()
+
+        pass
 
     def save(self):
         pass

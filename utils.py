@@ -34,7 +34,7 @@ def resize_image(image_array, scale, resampling_method="bicubic"):
 
     height, width = image_array.shape[0:2]
     new_width = int(width * scale)
-    new_height = int(width * scale)
+    new_height = int(height * scale)
 
     if resampling_method not in resampling_methods:
         raise ValueError(
@@ -93,3 +93,13 @@ def calc_psnr(mse, max_value=255.0):
     else:
         psnr = 20 * math.log(max_value / math.sqrt(mse), 10)
     return psnr
+
+
+def convert_rgb_to_y(image):
+    if len(image.shape) <= 2 or image.shape[2] == 1:
+        return image
+
+    xform = np.array([[65.738 / 256.0, 129.057 / 256.0, 25.064 / 256.0]])
+    y_image = image.dot(xform.T) + 16.0
+
+    return y_image
