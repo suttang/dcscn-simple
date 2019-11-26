@@ -103,3 +103,53 @@ def convert_rgb_to_y(image):
     y_image = image.dot(xform.T) + 16.0
 
     return y_image
+
+
+def convert_ycbcr_to_rgb(ycbcr_image):
+    rgb_image = np.zeros([ycbcr_image.shape[0], ycbcr_image.shape[1], 3])
+
+    rgb_image[:, :, 0] = ycbcr_image[:, :, 0] - 16.0
+    rgb_image[:, :, [1, 2]] = ycbcr_image[:, :, [1, 2]] - 128.0
+    xform = np.array(
+        [
+            [298.082 / 256.0, 0, 408.583 / 256.0],
+            [298.082 / 256.0, -100.291 / 256.0, -208.120 / 256.0],
+            [298.082 / 256.0, 516.412 / 256.0, 0],
+        ]
+    )
+    rgb_image = rgb_image.dot(xform.T)
+
+    return rgb_image
+
+
+def convert_rgb_to_ycbcr(image):
+    if len(image.shape) < 2 or image.shape[2] == 1:
+        return image
+
+    xform = np.array(
+        [
+            [65.738 / 256.0, 129.057 / 256.0, 25.064 / 256.0],
+            [-37.945 / 256.0, -74.494 / 256.0, 112.439 / 256.0],
+            [112.439 / 256.0, -94.154 / 256.0, -18.285 / 256.0],
+        ]
+    )
+
+    ycbcr_image = image.dot(xform.T)
+    ycbcr_image[:, :, 0] += 16.0
+    ycbcr_image[:, :, [1, 2]] += 128.0
+
+    return ycbcr_image
+
+
+def convert_y_and_cbcr_to_rgb(y_image, cbcr_image):
+    if len(y_image.shape) <= 2:
+        y_image = y_image.reshape[y_image.shape[0], y_image.shape[1], 1]
+
+    if len(y_image.shape) == 3 and y_image.shape[2] == 3:
+        y_image = y_image[:, :, 0:1]
+
+    ycbcr_image = np.zeros([y_image.shape[0], y_image.shape[1], 3])
+    ycbcr_image[:, :, 0] = y_image[:, :, 0]
+    ycbcr_image[:, :, 1:3] = cbcr_image[:, :, 0:2]
+
+    return convert_ycbcr_to_rgb(ycbcr_image)

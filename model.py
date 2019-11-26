@@ -6,6 +6,8 @@ import tensorflow as tf
 import dataset
 from utils import add_summaries
 from utils import convert_rgb_to_y
+from utils import convert_rgb_to_ycbcr
+from utils import convert_y_and_cbcr_to_rgb
 from utils import resize_image
 from utils import save_image
 
@@ -387,13 +389,15 @@ class Dcscn:
                 print("Step: {}, loss: {}, mse: {}".format(i, s_loss, s_mse))
 
             writer.close()
+            self.save(sess, "modelhoge")
 
-    def inference(self, input_image, output_dir):
-        # Convert image to Y
+    def inference(self, input_image, output_dir, save_images=False):
+        # Create scaled image
+        scaled_image = resize_image(input_image, 2)
+
+        # Create y and scaled y image
         input_y_image = convert_rgb_to_y(input_image)
         scaled_y_image = resize_image(input_y_image, self.scale)
-
-        save_image(scaled_y_image, "{}/bicubic_y.jpg".format(output_dir), is_rgb=False)
 
         x, y, x2, learning_rate, dropout, is_training = self.placeholders(
             input_channel=self.input_channel, output_channel=self.output_channel
@@ -420,15 +424,24 @@ class Dcscn:
             y_hat = sess.run([predict], feed_dict=feed_dict)
             output_y_image = y_hat[0][0]
 
-        # Save output image
-        save_image(output_y_image, "{}/result_y.jpg".format(output_dir), is_rgb=False)
+        # Create result image
+        scaled_ycbcr_image = convert_rgb_to_ycbcr(scaled_image)
+        result_image = convert_y_and_cbcr_to_rgb(
+            output_y_image, scaled_ycbcr_image[:, :, 1:3]
+        )
 
-        # y_hat = self.forward()
+        if save_images:
+            save_image(input_image, "{}/original.jpg".format(output_dir))
+            save_image(scaled_image, "{}/bicubic.jpg".format(output_dir))
+            save_image(scaled_y_image, "{}/bicubic_y.jpg".format(output_dir), is_rgb=False)
+            save_image(result_image, "{}/result.jpg".format(output_dir))
 
-        pass
+        return result_image
 
-    def save(self):
-        pass
+    def save(self, sess, name=""):
+        filename = "{}.ckpt".format(name)
+        saver = tf.train.Saver(max_to_keep=None)
+        saver.save(sess, filename)
 
     def load(self):
         pass

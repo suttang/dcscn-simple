@@ -15,15 +15,8 @@ def main(input, output):
     input_image = load_image(input)
     model = Dcscn()
 
-    # Save original image
     os.makedirs(output, exist_ok=True)
-    save_image(input_image, "{}/original.jpg".format(output))
-
-    # Save bicubic resize image
-    scaled_image = resize_image(input_image, 2)
-    save_image(scaled_image, "{}/bicubic.jpg".format(output))
-
-    model.inference(input_image, output)
+    model.inference(input_image, output, save_images=True)
 
 
 if __name__ == "__main__":
