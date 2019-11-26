@@ -13,6 +13,7 @@ from utils import convert_y_and_cbcr_to_rgb
 from utils import resize_image
 from utils import save_image
 from utils import load_image
+from utils import calc_psnr_and_ssim
 
 
 class Dcscn:
@@ -60,8 +61,11 @@ class Dcscn:
         self.H = []
         self.Weights = []
         self.Biases = []
+        self.y_hat = None
 
         # Restore model path
+        self.is_use_restore = False
+
         if with_restore:
             self.is_use_restore = True
             self.restore_model_path = with_restore
@@ -191,6 +195,9 @@ class Dcscn:
         return x, y, x2, learning_rate, dropout, is_training
 
     def forward(self, x, x2, dropout):
+        if self.y_hat is not None:
+            return self.y_hat
+
         # building feature extraction layers
         output_feature_num = self.filters
         total_output_feature_num = 0
@@ -294,6 +301,7 @@ class Dcscn:
             tf.summary.scalar("output/stddev", stddev)
             tf.summary.histogram("output", y_hat)
 
+        self.y_hat = y_hat
         return y_hat
 
     def loss(self, y_hat, y):
@@ -468,29 +476,16 @@ class Dcscn:
         return result_image
 
     def evaluate(self, filepath):
-        # input_image = align_image(load_image(filepath), self.scale)
-        # # output_image =
+        input_image = align_image(load_image(filepath), self.scale)
+        input_y_image = resize_image(convert_rgb_to_y(input_image), 1 / self.scale)
+        input_scaled_y_image = resize_image(input_y_image, self.scale)
 
-        # input_y_image = resize_image(convert_rgb_to_y(eval_image), 1 / self.scale)
-        # groud_truth_y_image = convert_rgb_to_y(eval_image)
+        output_y_image = self.run(input_y_image, input_scaled_y_image)
+        ground_truth_y_image = convert_rgb_to_y(input_image)
 
-        # output_y_image = self.inference(input_y_image)
-
-        # import pdb
-
-        # pdb.set_trace()
-
-        # input_y_image =
-
-        # build_input_image をやる必要があるかも
-
-        # import pdb
-
-        # pdb.set_trace()
-
-        # psnr, ssim = utils.
-
-        pass
+        return calc_psnr_and_ssim(
+            ground_truth_y_image, output_y_image, border=self.scale
+        )
 
     def save(self, sess, name=""):
         filename = "{}.ckpt".format(name)

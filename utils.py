@@ -1,8 +1,10 @@
 import math
 
 import numpy as np
-from PIL import Image
 import tensorflow as tf
+from PIL import Image
+from skimage.measure import compare_psnr
+from skimage.measure import compare_ssim
 
 # from skimage.measure import compare_psnr, compare_ssim
 
@@ -188,9 +190,25 @@ def trim_image_as_file(image):
 
 
 def calc_psnr_and_ssim(image1, image2, border=0):
-    trimmed_image1 = trim_image_as_file(image1)
-    trimmed_image2 = trim_image_as_file(image2)
+    image1 = trim_image_as_file(image1)
+    image2 = trim_image_as_file(image2)
 
     if border > 0:
         image1 = image1[border:-border, border:-border, :]
         image2 = image2[border:-border, border:-border, :]
+
+    psnr = compare_psnr(image1, image2, data_range=255)
+    ssim = compare_ssim(
+        image1,
+        image2,
+        win_size=11,
+        gaussian_weights=True,
+        multichannel=True,
+        K1=0.01,
+        K2=0.03,
+        sigma=1.5,
+        data_range=255,
+    )
+
+    return psnr, ssim
+

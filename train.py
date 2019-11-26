@@ -10,10 +10,14 @@ from model import Dcscn
 def main(output):
     model = Dcscn()
 
-    # test_files = get_test_files("set5")
-    # psnr, ssim = get_metrics(model, test_files)
+    test_files = get_test_files("set5")
+    psnr, ssim = get_metrics(model, test_files)
 
-    model.train(output_path=output)
+    import pdb
+
+    pdb.set_trace()
+
+    # model.train(output_path=output)
 
     # psnr, ssim = model.evaluate()
 
