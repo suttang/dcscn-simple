@@ -4,6 +4,8 @@ import numpy as np
 from PIL import Image
 import tensorflow as tf
 
+# from skimage.measure import compare_psnr, compare_ssim
+
 
 def he_initializer(shape):
     n = shape[0] * shape[1] * shape[2]
@@ -162,3 +164,33 @@ def image_alignment(image, alignment):
 
     pdb.set_trace()
     # width, height = image.shape
+
+
+def align_image(image, alignment):
+    alignment = int(alignment)
+    width, height = image.shape[1], image.shape[0]
+    width = (width // alignment) * alignment
+    height = (height // alignment) * alignment
+
+    if image.shape[1] != width or image.shape[0] != height:
+        image = image[:height, :width, :]
+
+    if len(image.shape) >= 3 and image.shape[2] >= 4:
+        image = image[:, :, 0:3]
+
+    return image
+
+
+def trim_image_as_file(image):
+    trimmed = np.clip(np.rint(image), 0, 255)
+
+    return trimmed
+
+
+def calc_psnr_and_ssim(image1, image2, border=0):
+    trimmed_image1 = trim_image_as_file(image1)
+    trimmed_image2 = trim_image_as_file(image2)
+
+    if border > 0:
+        image1 = image1[border:-border, border:-border, :]
+        image2 = image2[border:-border, border:-border, :]

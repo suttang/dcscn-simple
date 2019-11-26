@@ -6,15 +6,17 @@ import tensorflow as tf
 
 import dataset
 from utils import add_summaries
+from utils import align_image
 from utils import convert_rgb_to_y
 from utils import convert_rgb_to_ycbcr
 from utils import convert_y_and_cbcr_to_rgb
 from utils import resize_image
 from utils import save_image
+from utils import load_image
 
 
 class Dcscn:
-    def __init__(self):
+    def __init__(self, with_restore=False):
         # Scale factor for Super Resolution (should be 2 or more)
         self.scale = 2
 
@@ -31,7 +33,8 @@ class Dcscn:
         # Number of filters of last feature-extraction CNNs
         self.min_filters = 48
 
-        # Number of CNN filters are decayed from [filters] to [min_filters] by this gamma
+        # Number of CNN filters are decayed
+        # from [filters] to [min_filters] by this gamma
         self.filters_decay_gamma = 1.5
 
         # Initial weight stddev (won't be used when you use he or xavier initializer)
@@ -59,7 +62,9 @@ class Dcscn:
         self.Biases = []
 
         # Restore model path
-        self.restore_model_path = None
+        if with_restore:
+            self.is_use_restore = True
+            self.restore_model_path = with_restore
 
     def _he_initializer(self, shape):
         n = shape[0] * shape[1] * shape[2]
@@ -333,18 +338,18 @@ class Dcscn:
             training_optimizer = optimizer.minimize(loss)
 
         # Save weights
-        for i in range(len(grads)):
-            var = grads[i]
-            mean_var = tf.reduce_mean(var)
-            stddev_var = tf.sqrt(tf.reduce_mean(tf.square(var - mean_var)))
+        # for i in range(len(grads)):
+        #     var = grads[i]
+        #     mean_var = tf.reduce_mean(var)
+        #     stddev_var = tf.sqrt(tf.reduce_mean(tf.square(var - mean_var)))
 
-            # tf.summary.scalar("{}/mean".format(var.name), var)
-            # tf.summary.scalar("{}/stddev".format(grads[i].name), stddev_var)
-            # tf.summary.histogram(grads[i].name, var)
+        #     # tf.summary.scalar("{}/mean".format(var.name), var)
+        #     # tf.summary.scalar("{}/stddev".format(grads[i].name), stddev_var)
+        #     # tf.summary.histogram(grads[i].name, var)
 
         return training_optimizer
 
-    def train(self):
+    def train(self, output_path):
         x, y, x2, learning_rate, dropout, is_training = self.placeholders(
             input_channel=self.input_channel, output_channel=self.output_channel
         )
@@ -367,7 +372,7 @@ class Dcscn:
 
             sess.run(tf.global_variables_initializer())
 
-            for i in range(1000):
+            for i in range(10):
                 input_images, upscaled_images, original_images = loader.feed()
 
                 feed_dict = {
@@ -393,7 +398,48 @@ class Dcscn:
                 print("Step: {}, loss: {}, mse: {}".format(i, s_loss, s_mse))
 
             writer.close()
-            self.save(sess, "modelhoge")
+
+            # Save model
+            output_dir = os.path.dirname(os.path.join(os.getcwd(), output_path))
+            os.makedirs(output_dir, exist_ok=True)
+            self.save(sess, output_path)
+
+    def run(self, input_image, input_bicubic_image):
+        x, y, x2, learning_rate, dropout, is_training = self.placeholders(
+            input_channel=self.input_channel, output_channel=self.output_channel
+        )
+        h, w = input_image.shape[:2]
+        ch = input_image.shape[2] if len(input_image.shape) > 2 else 1
+
+        with tf.Session() as sess:
+            predict = self.forward(x, x2, dropout)
+
+            sess.run(tf.global_variables_initializer())
+
+            # Restore model
+            if self.is_use_restore:
+                restore_path = os.path.join(
+                    os.getcwd(), self.restore_model_path + ".ckpt"
+                )
+                saver = tf.train.Saver()
+                saver.restore(sess, restore_path)
+
+            feed_dict = {
+                x: input_image.reshape(1, h, w, ch),
+                x2: input_bicubic_image.reshape(
+                    1,
+                    self.scale * input_image.shape[0],
+                    self.scale * input_image.shape[1],
+                    ch,
+                ),
+                learning_rate: self.learning_rate,
+                dropout: 1.0,
+                is_training: 0,
+            }
+            y_hat = sess.run([predict], feed_dict=feed_dict)
+            output = y_hat[0][0]
+
+        return output
 
     def inference(self, input_image, output_dir, save_images=False):
         # Create scaled image
@@ -403,36 +449,7 @@ class Dcscn:
         input_y_image = convert_rgb_to_y(input_image)
         scaled_y_image = resize_image(input_y_image, self.scale)
 
-        x, y, x2, learning_rate, dropout, is_training = self.placeholders(
-            input_channel=self.input_channel, output_channel=self.output_channel
-        )
-
-        h, w = input_y_image.shape[:2]
-        ch = input_y_image.shape[2] if len(input_y_image.shape) > 2 else 1
-
-        with tf.Session() as sess:
-            predict = self.forward(x, x2, dropout)
-            sess.run(tf.global_variables_initializer())
-
-            # Restore model
-            if self.restore_model_path:
-                saver = tf.train.Saver()
-                saver.restore(sess, self.restore_model_path)
-
-            feed_dict = {
-                x: input_y_image.reshape(1, h, w, ch),
-                x2: scaled_y_image.reshape(
-                    1,
-                    self.scale * input_y_image.shape[0],
-                    self.scale * input_y_image.shape[1],
-                    ch,
-                ),
-                learning_rate: self.learning_rate,
-                dropout: 1.0,
-                is_training: 0,
-            }
-            y_hat = sess.run([predict], feed_dict=feed_dict)
-            output_y_image = y_hat[0][0]
+        output_y_image = self.run(input_y_image, scaled_y_image)
 
         # Create result image
         scaled_ycbcr_image = convert_rgb_to_ycbcr(scaled_image)
@@ -450,17 +467,32 @@ class Dcscn:
 
         return result_image
 
-    def evaluate(self):
+    def evaluate(self, filepath):
+        # input_image = align_image(load_image(filepath), self.scale)
+        # # output_image =
+
+        # input_y_image = resize_image(convert_rgb_to_y(eval_image), 1 / self.scale)
+        # groud_truth_y_image = convert_rgb_to_y(eval_image)
+
+        # output_y_image = self.inference(input_y_image)
+
+        # import pdb
+
+        # pdb.set_trace()
+
+        # input_y_image =
+
+        # build_input_image をやる必要があるかも
+
+        # import pdb
+
+        # pdb.set_trace()
+
+        # psnr, ssim = utils.
+
         pass
 
     def save(self, sess, name=""):
         filename = "{}.ckpt".format(name)
         saver = tf.train.Saver(max_to_keep=None)
         saver.save(sess, filename)
-
-    def load(self, name=""):
-        filename = "{}.ckpt".format(name)
-        if not os.path.isfile("{}.index".format(filename)):
-            raise Exception("There is no saved model in {}.index".format(filename))
-
-        self.restore_model_path = filename

@@ -1,23 +1,20 @@
 import os
 
-import numpy as np
+import click
 
 from model import Dcscn
 
 
-def main():
+@click.command()
+@click.argument("output")
+def main(output):
     model = Dcscn()
 
-    test_files = get_test_files("set5")
-    psnr, ssim = get_metrics(model.test_files)
+    # test_files = get_test_files("set5")
+    # psnr, ssim = get_metrics(model, test_files)
 
-    model.train()
+    model.train(output_path=output)
 
-    import pdb
-
-    pdb.set_trace()
-
-    test_files = "set5"
     # psnr, ssim = model.evaluate()
 
 
@@ -29,6 +26,7 @@ def get_metrics(model, files):
         psnr, ssim = model.evaluate(file)
         psnrs += psnr
         ssims += ssim
+
     psnr /= len(files)
     ssim = ssims / len(files)
 
@@ -38,7 +36,7 @@ def get_metrics(model, files):
 def get_test_files(dataset_name):
     dataset_dir = os.path.join(os.getcwd(), "data", dataset_name)
     return [
-        dataset_dir + file
+        os.path.join(dataset_dir, file)
         for file in os.listdir(dataset_dir)
         if os.path.isfile(os.path.join(dataset_dir, file)) and not file.startswith(".")
     ]
