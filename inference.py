@@ -16,7 +16,7 @@ def main(input, output, model_name):
 
     input_image = load_image(input)
     model = Dcscn()
-    model.load(model)
+    model.load(model_name)
 
     os.makedirs(output, exist_ok=True)
     model.inference(input_image, output, save_images=True)

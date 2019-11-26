@@ -153,3 +153,11 @@ def convert_y_and_cbcr_to_rgb(y_image, cbcr_image):
     ycbcr_image[:, :, 1:3] = cbcr_image[:, :, 0:2]
 
     return convert_ycbcr_to_rgb(ycbcr_image)
+
+
+def image_alignment(image, alignment):
+    alignment = int(alignment)
+    import pdb
+
+    pdb.set_trace()
+    # width, height = image.shape

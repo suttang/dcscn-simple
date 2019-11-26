@@ -58,6 +58,9 @@ class Dcscn:
         self.Weights = []
         self.Biases = []
 
+        # Restore model path
+        self.restore_model_path = None
+
     def _he_initializer(self, shape):
         n = shape[0] * shape[1] * shape[2]
         stddev = math.sqrt(2.0 / n)
@@ -364,7 +367,7 @@ class Dcscn:
 
             sess.run(tf.global_variables_initializer())
 
-            for i in range(200):
+            for i in range(1000):
                 input_images, upscaled_images, original_images = loader.feed()
 
                 feed_dict = {
@@ -410,6 +413,12 @@ class Dcscn:
         with tf.Session() as sess:
             predict = self.forward(x, x2, dropout)
             sess.run(tf.global_variables_initializer())
+
+            # Restore model
+            if self.restore_model_path:
+                saver = tf.train.Saver()
+                saver.restore(sess, self.restore_model_path)
+
             feed_dict = {
                 x: input_y_image.reshape(1, h, w, ch),
                 x2: scaled_y_image.reshape(
@@ -440,16 +449,18 @@ class Dcscn:
             save_image(result_image, "{}/result.jpg".format(output_dir))
 
         return result_image
+    
+    def evaluate(self):
+        pass
 
     def save(self, sess, name=""):
         filename = "{}.ckpt".format(name)
         saver = tf.train.Saver(max_to_keep=None)
         saver.save(sess, filename)
 
-    def load(self, sess, name=""):
+    def load(self, name=""):
         filename = "{}.ckpt".format(name)
-        if not os.path.isfile("{}.index".format(name)):
-            raise Exception("There is no saved model in {}".format(filename))
+        if not os.path.isfile("{}.index".format(filename)):
+            raise Exception("There is no saved model in {}.index".format(filename))
 
-        saver = tf.train.Saver()
-        saver.restore(sess, filename)
+        self.restore_model_path = filename
