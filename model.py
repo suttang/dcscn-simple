@@ -1,4 +1,5 @@
 from datetime import datetime
+import os
 import math
 
 import tensorflow as tf
@@ -433,7 +434,9 @@ class Dcscn:
         if save_images:
             save_image(input_image, "{}/original.jpg".format(output_dir))
             save_image(scaled_image, "{}/bicubic.jpg".format(output_dir))
-            save_image(scaled_y_image, "{}/bicubic_y.jpg".format(output_dir), is_rgb=False)
+            save_image(
+                scaled_y_image, "{}/bicubic_y.jpg".format(output_dir), is_rgb=False
+            )
             save_image(result_image, "{}/result.jpg".format(output_dir))
 
         return result_image
@@ -443,5 +446,10 @@ class Dcscn:
         saver = tf.train.Saver(max_to_keep=None)
         saver.save(sess, filename)
 
-    def load(self):
-        pass
+    def load(self, sess, name=""):
+        filename = "{}.ckpt".format(name)
+        if not os.path.isfile("{}.index".format(name)):
+            raise Exception("There is no saved model in {}".format(filename))
+
+        saver = tf.train.Saver()
+        saver.restore(sess, filename)

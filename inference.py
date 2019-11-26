@@ -11,9 +11,12 @@ from utils import resize_image
 @click.command()
 @click.argument("input")
 @click.argument("output")
-def main(input, output):
+@click.option("-m", "--model", "model_name")
+def main(input, output, model_name):
+
     input_image = load_image(input)
     model = Dcscn()
+    model.load(model)
 
     os.makedirs(output, exist_ok=True)
     model.inference(input_image, output, save_images=True)
