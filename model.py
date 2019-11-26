@@ -14,6 +14,7 @@ from utils import resize_image
 from utils import save_image
 from utils import load_image
 from utils import calc_psnr_and_ssim
+from utils import get_validation_files
 
 
 class Dcscn:
@@ -51,17 +52,16 @@ class Dcscn:
         self.clipping_norm = 5
 
         # L2 decay
-        self.l2_decay = 0.0001
+        self.l2_decay = 0.00003
 
         # Number of mini-batch images for training
         self.batch_size = 5
 
-        self.learning_rate = 0.002
+        self.initial_learning_rate = 0.0002
 
         self.H = []
         self.Weights = []
         self.Biases = []
-        self.y_hat = None
 
         # Restore model path
         self.is_use_restore = False
@@ -69,6 +69,18 @@ class Dcscn:
         if with_restore:
             self.is_use_restore = True
             self.restore_model_path = with_restore
+
+        # Build graph
+        x, y, x2, learning_rate, dropout, is_training = self.placeholders(
+            input_channel=self.input_channel, output_channel=self.output_channel
+        )
+        self.x = x
+        self.x2 = x2
+        self.y = y
+        self.learning_rate = learning_rate
+        self.dropout = dropout
+        self.is_training = is_training
+        self.y_hat = self.forward(self.x, self.x2, self.dropout)
 
     def _he_initializer(self, shape):
         n = shape[0] * shape[1] * shape[2]
@@ -195,9 +207,6 @@ class Dcscn:
         return x, y, x2, learning_rate, dropout, is_training
 
     def forward(self, x, x2, dropout):
-        if self.y_hat is not None:
-            return self.y_hat
-
         # building feature extraction layers
         output_feature_num = self.filters
         total_output_feature_num = 0
@@ -301,7 +310,6 @@ class Dcscn:
             tf.summary.scalar("output/stddev", stddev)
             tf.summary.histogram("output", y_hat)
 
-        self.y_hat = y_hat
         return y_hat
 
     def loss(self, y_hat, y):
@@ -357,16 +365,10 @@ class Dcscn:
 
         return training_optimizer
 
-    def train(self, output_path):
-        x, y, x2, learning_rate, dropout, is_training = self.placeholders(
-            input_channel=self.input_channel, output_channel=self.output_channel
-        )
+    def train(self, output_path, validation_dataset=None):
+        loss, image_loss, mse = self.loss(self.y_hat, self.y)
 
-        # then you can use self.H_concat
-        y_hat = self.forward(x, x2, dropout)
-        loss, image_loss, mse = self.loss(y_hat, y)
-
-        training = self.optimizer(loss, learning_rate)
+        training = self.optimizer(loss, self.learning_rate)
 
         loader = dataset.Loader(
             "bsd200", scale=self.scale, image_size=48, batch_size=self.batch_size
@@ -380,16 +382,16 @@ class Dcscn:
 
             sess.run(tf.global_variables_initializer())
 
-            for i in range(10):
+            for i in range(8000 * 100):
                 input_images, upscaled_images, original_images = loader.feed()
 
                 feed_dict = {
-                    x: input_images,
-                    x2: upscaled_images,
-                    y: original_images,
-                    learning_rate: self.learning_rate,
-                    dropout: self.dropout_rate,
-                    is_training: 1,
+                    self.x: input_images,
+                    self.x2: upscaled_images,
+                    self.y: original_images,
+                    self.learning_rate: self.initial_learning_rate,
+                    self.dropout: self.dropout_rate,
+                    self.is_training: 1,
                 }
 
                 _, summarized, s_loss, s_mse = sess.run(
@@ -399,11 +401,30 @@ class Dcscn:
 
                 # Learning rate
                 lr_summary = tf.Summary(
-                    value=[tf.Summary.Value(tag="LR", simple_value=self.learning_rate)]
+                    value=[
+                        tf.Summary.Value(
+                            tag="LR", simple_value=self.initial_learning_rate
+                        )
+                    ]
                 )
                 writer.add_summary(lr_summary, i)
 
                 print("Step: {}, loss: {}, mse: {}".format(i, s_loss, s_mse))
+
+                if i % 8000 == 0:
+                    # Metrics
+                    if validation_dataset is not None:
+                        validation_files = get_validation_files(validation_dataset)
+                        psnr, ssim = self.calc_metrics(validation_files)
+                        print("PSNR: {}, SSSIM: {}".format(psnr, ssim))
+                        psnr_summary = tf.Summary(
+                            value=[tf.Summary.Value(tag="PSNR", simple_value=psnr)]
+                        )
+                        ssim_summary = tf.Summary(
+                            value=[tf.Summary.Value(tag="SSIM", simple_value=ssim)]
+                        )
+                        writer.add_summary(psnr_summary, i)
+                        writer.add_summary(ssim_summary, i)
 
             writer.close()
 
@@ -413,15 +434,10 @@ class Dcscn:
             self.save(sess, output_path)
 
     def run(self, input_image, input_bicubic_image):
-        x, y, x2, learning_rate, dropout, is_training = self.placeholders(
-            input_channel=self.input_channel, output_channel=self.output_channel
-        )
         h, w = input_image.shape[:2]
         ch = input_image.shape[2] if len(input_image.shape) > 2 else 1
 
         with tf.Session() as sess:
-            predict = self.forward(x, x2, dropout)
-
             sess.run(tf.global_variables_initializer())
 
             # Restore model
@@ -433,18 +449,18 @@ class Dcscn:
                 saver.restore(sess, restore_path)
 
             feed_dict = {
-                x: input_image.reshape(1, h, w, ch),
-                x2: input_bicubic_image.reshape(
+                self.x: input_image.reshape(1, h, w, ch),
+                self.x2: input_bicubic_image.reshape(
                     1,
                     self.scale * input_image.shape[0],
                     self.scale * input_image.shape[1],
                     ch,
                 ),
-                learning_rate: self.learning_rate,
-                dropout: 1.0,
-                is_training: 0,
+                self.learning_rate: self.initial_learning_rate,
+                self.dropout: 1.0,
+                self.is_training: 0,
             }
-            y_hat = sess.run([predict], feed_dict=feed_dict)
+            y_hat = sess.run([self.y_hat], feed_dict=feed_dict)
             output = y_hat[0][0]
 
         return output
@@ -491,3 +507,17 @@ class Dcscn:
         filename = "{}.ckpt".format(name)
         saver = tf.train.Saver(max_to_keep=None)
         saver.save(sess, filename)
+
+    def calc_metrics(self, files):
+        psnrs = 0
+        ssims = 0
+
+        for file in files:
+            psnr, ssim = self.evaluate(file)
+            psnrs += psnr
+            ssims += ssim
+
+        psnr /= len(files)
+        ssim = ssims / len(files)
+
+        return psnr, ssim

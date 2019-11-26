@@ -1,4 +1,5 @@
 import math
+import os
 
 import numpy as np
 import tensorflow as tf
@@ -212,3 +213,11 @@ def calc_psnr_and_ssim(image1, image2, border=0):
 
     return psnr, ssim
 
+
+def get_validation_files(dataset_name):
+    dataset_dir = os.path.join(os.getcwd(), "data", dataset_name)
+    return [
+        os.path.join(dataset_dir, file)
+        for file in os.listdir(dataset_dir)
+        if os.path.isfile(os.path.join(dataset_dir, file)) and not file.startswith(".")
+    ]

@@ -12,6 +12,8 @@ numpy = "==1.15.0"
 pillow = "==6.0.0"
 tensorflow = "==1.14.0"
 click = "*"
+pip = "*"
+scikit-image = "*"
 
 [requires]
 python_version = "3.7"
