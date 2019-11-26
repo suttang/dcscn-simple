@@ -394,24 +394,24 @@ class Dcscn:
                     self.is_training: 1,
                 }
 
-                _, summarized, s_loss, s_mse = sess.run(
-                    [training, summary, loss, mse], feed_dict=feed_dict
-                )
-                writer.add_summary(summarized, i)
-
-                # Learning rate
-                lr_summary = tf.Summary(
-                    value=[
-                        tf.Summary.Value(
-                            tag="LR", simple_value=self.initial_learning_rate
-                        )
-                    ]
-                )
-                writer.add_summary(lr_summary, i)
-
+                _, s_loss, s_mse = sess.run([training, loss, mse], feed_dict=feed_dict)
                 print("Step: {}, loss: {}, mse: {}".format(i, s_loss, s_mse))
 
-                if i % 8000 == 0:
+                if i % 100 == 0:
+                    summarized, _ = sess.run([summary, loss], feed_dict=feed_dict)
+                    writer.add_summary(summarized, i)
+
+                    # Learning rate
+                    lr_summary = tf.Summary(
+                        value=[
+                            tf.Summary.Value(
+                                tag="LR", simple_value=self.initial_learning_rate
+                            )
+                        ]
+                    )
+                    writer.add_summary(lr_summary, i)
+
+                if i % 1000 == 0:
                     # Metrics
                     if validation_dataset is not None:
                         validation_files = get_validation_files(validation_dataset)
