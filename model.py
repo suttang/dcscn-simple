@@ -50,7 +50,7 @@ class Dcscn:
         self.l2_decay = 0.0001
 
         # Number of mini-batch images for training
-        self.batch_size = 20
+        self.batch_size = 5
 
         self.learning_rate = 0.002
 
@@ -449,7 +449,7 @@ class Dcscn:
             save_image(result_image, "{}/result.jpg".format(output_dir))
 
         return result_image
-    
+
     def evaluate(self):
         pass
 

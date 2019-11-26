@@ -84,7 +84,8 @@ def add_summaries(
         if save_max:
             tf.summary.scalar("min/{}".format(name), tf.reduce_max(value))
 
-        tf.summary.histogram(name, value)
+        # Too slow
+        # tf.summary.histogram(name, value)
 
 
 def calc_psnr(mse, max_value=255.0):
