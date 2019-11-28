@@ -22,10 +22,11 @@ def load_image(filename):
 
 
 def save_image(image_array, filepath, is_rgb=True):
-    if is_rgb:
-        image = Image.fromarray(np.uint8(image_array))
-    else:
-        image = Image.fromarray(np.uint8(image_array[:, :, 0]), "L")
+    if len(image_array.shape) >= 3 and image_array.shape[2] == 1:
+        image_array = image_array.reshape(image_array.shape[0], image_array.shape[1])
+    image_array = np.clip(np.round(image_array), 0, 255).astype(np.uint8)
+
+    image = Image.fromarray(np.uint8(image_array))
     image.save(filepath)
 
 

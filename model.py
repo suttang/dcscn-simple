@@ -411,7 +411,7 @@ class Dcscn:
                     )
                     writer.add_summary(lr_summary, i)
 
-                if i % 1000 == 0:
+                if i % 8000 == 0:
                     # Metrics
                     if validation_dataset is not None:
                         validation_files = get_validation_files(validation_dataset)
@@ -486,6 +486,9 @@ class Dcscn:
             save_image(scaled_image, "{}/bicubic.jpg".format(output_dir))
             save_image(
                 scaled_y_image, "{}/bicubic_y.jpg".format(output_dir), is_rgb=False
+            )
+            save_image(
+                output_y_image, "{}/result_y.jpg".format(output_dir), is_rgb=False
             )
             save_image(result_image, "{}/result.jpg".format(output_dir))
 
