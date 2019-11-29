@@ -212,14 +212,13 @@ class Dcscn:
             for i in range(layers)
         ]
 
-    def forward(self, x, x2, dropout):
+    def forward(self, input, x2, dropout):
         # building feature extraction layers
         total_output_feature_num = 0
-        input_tensor = x
 
         with tf.name_scope("X_"):
-            mean_var = tf.reduce_mean(x)
-            stddev_var = tf.sqrt(tf.reduce_mean(tf.square(x - mean_var)))
+            mean_var = tf.reduce_mean(input)
+            stddev_var = tf.sqrt(tf.reduce_mean(tf.square(input - mean_var)))
             tf.summary.scalar("output/mean", mean_var)
             tf.summary.scalar("output/stddev", stddev_var)
 
@@ -231,7 +230,7 @@ class Dcscn:
         for i, filter in enumerate(filters):
             self._convolutional_block(
                 "CNN%d" % (i + 1),
-                input_tensor,
+                input,
                 kernel_size=3,
                 input_feature_num=input_filter,
                 output_feature_num=filter,
@@ -240,7 +239,7 @@ class Dcscn:
                 dropout=dropout,
             )
             input_filter = filter
-            input_tensor = self.H[-1]
+            input = self.H[-1]
             total_output_feature_num += filter
 
         with tf.variable_scope("Concat"):
@@ -519,3 +518,39 @@ class Dcscn:
         ssim = ssims / len(files)
 
         return psnr, ssim
+
+    
+    def metrics(self, output, labels):
+        output_transposed = output if self.data_format == 'NHWC' else tf.transpose(output, perm=[0, 2, 3, 1])
+
+        output = tf.Print(output, [tf.shape(output)], message="shape of output:", summarize=1000)
+        output = tf.Print(output, [output], message="value of output:", summarize=1000)
+        # labels = tf.Print(labels, [labels])
+        # labels = tf.Print(labels)
+
+        # labels = tf.image.rgb_to_yuv(labels)
+
+        results = {}
+        updates = []
+        with tf.name_scope('metrics_cals'):
+            mean_squared_error, mean_squared_error_update = tf.metrics.mean_squared_error(
+                labels,
+                output_transposed,
+            )
+            results["mean_squared_error"] = mean_squared_error
+            updates.append(mean_squared_error_update)
+
+            psnr_array = tf.image.psnr(labels, output, max_val=1.0)
+            psnr, psnr_update = tf.metrics.mean(psnr_array)
+            results["psnr"] = psnr
+            updates.append(psnr_update)
+
+            ssim_array = tf.image.ssim(labels, output, max_val=1.0)
+            ssim, ssim_update = tf.metrics.mean(ssim_array)
+            results["ssim"] = ssim
+            updates.append(ssim_update)
+
+            # merge all updates
+            updates_op = tf.group(*updates)
+
+            return results, updates_op
