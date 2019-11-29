@@ -206,11 +206,15 @@ class Dcscn:
 
         return x, y, x2, learning_rate, dropout, is_training
 
+    def _calc_filters(self, first, last, layers, decay):
+        return [
+            int((first - last) * (1 - pow(i / float(layers - 1), 1.0 / decay)) + last)
+            for i in range(layers)
+        ]
+
     def forward(self, x, x2, dropout):
         # building feature extraction layers
-        output_feature_num = self.filters
         total_output_feature_num = 0
-        input_feature_num = self.input_channel
         input_tensor = x
 
         with tf.name_scope("X_"):
@@ -219,34 +223,25 @@ class Dcscn:
             tf.summary.scalar("output/mean", mean_var)
             tf.summary.scalar("output/stddev", stddev_var)
 
-        for i in range(self.layers):
-            if self.min_filters != 0 and i > 0:
-                x1 = i / float(self.layers - 1)
-                y1 = pow(x1, 1.0 / self.filters_decay_gamma)
-                output_feature_num = int(
-                    (self.filters - self.min_filters) * (1 - y1) + self.min_filters
-                )
+        filters = self._calc_filters(
+            self.filters, self.min_filters, self.layers, self.filters_decay_gamma
+        )
 
-                print(
-                    "x1, {}, y1, {}, output_feature_num: {}".format(
-                        x1, y1, output_feature_num
-                    )
-                )
-
+        input_filter = self.input_channel
+        for i, filter in enumerate(filters):
             self._convolutional_block(
                 "CNN%d" % (i + 1),
                 input_tensor,
                 kernel_size=3,
-                input_feature_num=input_feature_num,
-                output_feature_num=output_feature_num,
+                input_feature_num=input_filter,
+                output_feature_num=filter,
                 use_batch_norm=self.batch_norm,
                 dropout_rate=self.dropout_rate,
                 dropout=dropout,
             )
-
-            input_feature_num = output_feature_num
+            input_filter = filter
             input_tensor = self.H[-1]
-            total_output_feature_num += output_feature_num
+            total_output_feature_num += filter
 
         with tf.variable_scope("Concat"):
             self.H_concat = tf.concat(self.H, 3, name="H_concat")
