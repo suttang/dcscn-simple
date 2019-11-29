@@ -7,8 +7,6 @@ from PIL import Image
 from skimage.measure import compare_psnr
 from skimage.measure import compare_ssim
 
-# from skimage.measure import compare_psnr, compare_ssim
-
 
 def he_initializer(shape):
     n = shape[0] * shape[1] * shape[2]
