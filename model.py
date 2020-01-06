@@ -362,21 +362,29 @@ class Dcscn:
     def train(self, output_path, validation_dataset=None):
         loss, image_loss, mse = self.loss(self.y_hat, self.y)
 
-        training = self.optimizer(loss, self.learning_rate)
+        train_op = self.optimizer(loss, self.learning_rate)
+        metrics_ops_dict, metircs_update_op = self.metrics(self.y_hat, self.y)
+
+        summary_op = tf.summary.merge_all()
+
+        metrics_summary_op, metrics_placeholders = self._prepare_metrics(
+            metrics_ops_dict
+        )
 
         loader = dataset.Loader(
             "bsd200", scale=self.scale, image_size=48, batch_size=self.batch_size
         )
 
-        summary = tf.summary.merge_all()
+        init_op = tf.global_variables_initializer()
+        reset_metrics_op = tf.local_variables_initializer()
 
         with tf.Session() as sess:
+            sess.run([init_op, reset_metrics_op])
             log_dir = datetime.now().strftime("%Y%m%d%H%M%S")
             writer = tf.summary.FileWriter("logs/{}".format(log_dir), graph=sess.graph)
 
-            sess.run(tf.global_variables_initializer())
-
             for i in range(8000 * 100):
+                print("LOOP")
                 input_images, upscaled_images, original_images = loader.feed()
 
                 feed_dict = {
@@ -388,37 +396,52 @@ class Dcscn:
                     self.is_training: 1,
                 }
 
-                _, s_loss, s_mse = sess.run([training, loss, mse], feed_dict=feed_dict)
-                print("Step: {}, loss: {}, mse: {}".format(i, s_loss, s_mse))
+                # _, s_loss, s_mse = sess.run([train_op, loss, mse], feed_dict=feed_dict)
+                # print("Step: {}, loss: {}, mse: {}".format(i, s_loss, s_mse))
 
                 if i % 100 == 0:
-                    summarized, _ = sess.run([summary, loss], feed_dict=feed_dict)
-                    writer.add_summary(summarized, i)
-
-                    # Learning rate
-                    lr_summary = tf.Summary(
-                        value=[
-                            tf.Summary.Value(
-                                tag="LR", simple_value=self.initial_learning_rate
-                            )
-                        ]
+                    sess.run(reset_metrics_op)
+                    _, summary, _ = sess.run(
+                        [train_op, summary_op, metircs_update_op], feed_dict=feed_dict
                     )
-                    writer.add_summary(lr_summary, i)
+                    writer.add_summary(summary, i + 1)
 
-                if i % 8000 == 0:
                     # Metrics
-                    if validation_dataset is not None:
-                        validation_files = get_validation_files(validation_dataset)
-                        psnr, ssim = self.calc_metrics(validation_files)
-                        print("PSNR: {}, SSSIM: {}".format(psnr, ssim))
-                        psnr_summary = tf.Summary(
-                            value=[tf.Summary.Value(tag="PSNR", simple_value=psnr)]
+                    metrics_values = sess.run(list(metrics_ops_dict.values()))
+                    metrics_feed_dict = {
+                        placeholder: value
+                        for placeholder, value in zip(
+                            metrics_placeholders, metrics_values
                         )
-                        ssim_summary = tf.Summary(
-                            value=[tf.Summary.Value(tag="SSIM", simple_value=ssim)]
-                        )
-                        writer.add_summary(psnr_summary, i)
-                        writer.add_summary(ssim_summary, i)
+                    }
+                    metrics_summary, = sess.run(
+                        [metrics_summary_op], feed_dict=metrics_feed_dict
+                    )
+
+                    writer.add_summary(summary, i + 1)
+                    writer.add_summary(metrics_summary, i + 1)
+
+                else:
+                    sess.run([train_op], feed_dict=feed_dict)
+
+                # if i % 100 == 0:
+                #     summarized, _ = sess.run([summary_op, loss], feed_dict=feed_dict)
+                #     writer.add_summary(summarized, i)
+
+                # if i % 8000 == 0:
+                #     # Metrics
+                #     if validation_dataset is not None:
+                #         validation_files = get_validation_files(validation_dataset)
+                #         psnr, ssim = self.calc_metrics(validation_files)
+                #         print("PSNR: {}, SSSIM: {}".format(psnr, ssim))
+                #         psnr_summary = tf.Summary(
+                #             value=[tf.Summary.Value(tag="PSNR", simple_value=psnr)]
+                #         )
+                #         ssim_summary = tf.Summary(
+                #             value=[tf.Summary.Value(tag="SSIM", simple_value=ssim)]
+                #         )
+                #         writer.add_summary(psnr_summary, i)
+                #         writer.add_summary(ssim_summary, i)
 
             writer.close()
 
@@ -519,12 +542,15 @@ class Dcscn:
 
         return psnr, ssim
 
-    
     def metrics(self, output, labels):
-        output_transposed = output if self.data_format == 'NHWC' else tf.transpose(output, perm=[0, 2, 3, 1])
 
-        output = tf.Print(output, [tf.shape(output)], message="shape of output:", summarize=1000)
-        output = tf.Print(output, [output], message="value of output:", summarize=1000)
+        output = tf.Print(
+            output, [tf.shape(output)], message="OUTPUT: ", summarize=1000
+        )
+        labels = tf.Print(
+            labels, [tf.shape(labels)], message="Labels: ", summarize=1000
+        )
+
         # labels = tf.Print(labels, [labels])
         # labels = tf.Print(labels)
 
@@ -532,10 +558,9 @@ class Dcscn:
 
         results = {}
         updates = []
-        with tf.name_scope('metrics_cals'):
+        with tf.name_scope("metrics_cals"):
             mean_squared_error, mean_squared_error_update = tf.metrics.mean_squared_error(
-                labels,
-                output_transposed,
+                labels, output
             )
             results["mean_squared_error"] = mean_squared_error
             updates.append(mean_squared_error_update)
@@ -554,3 +579,30 @@ class Dcscn:
             updates_op = tf.group(*updates)
 
             return results, updates_op
+
+    def _prepare_metrics(self, metrics_ops_dict):
+        """Create summary_op and placeholders for training metrics.
+
+        Args:
+            metrics_ops_dict (dict): dict of name and metrics_op.
+
+        Returns:
+            metrics_summary_op: summary op of metrics.
+            metrics_placeholders: list of metrics placeholder.
+
+        """
+        with tf.name_scope("metrics"):
+            metrics_placeholders = []
+            metrics_summaries = []
+            for (metrics_key, metrics_op) in metrics_ops_dict.items():
+                metrics_placeholder = tf.compat.v1.placeholder(
+                    tf.float32, name="{}_placeholder".format(metrics_key)
+                )
+                summary = tf.compat.v1.summary.scalar(metrics_key, metrics_placeholder)
+                metrics_placeholders.append(metrics_placeholder)
+                metrics_summaries.append(summary)
+
+            metrics_summary_op = tf.summary.merge(metrics_summaries)
+
+        return metrics_summary_op, metrics_placeholders
+
