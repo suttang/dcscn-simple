@@ -365,6 +365,7 @@ class Dcscn:
         train_op = self.optimizer(loss, self.learning_rate)
         metrics_ops_dict, metircs_update_op = self.metrics(self.y_hat, self.y)
 
+        self.summary(self.y_hat, self.y)
         summary_op = tf.summary.merge_all()
 
         metrics_summary_op, metrics_placeholders = self._prepare_metrics(
@@ -395,9 +396,6 @@ class Dcscn:
                     self.dropout: self.dropout_rate,
                     self.is_training: 1,
                 }
-
-                # _, s_loss, s_mse = sess.run([train_op, loss, mse], feed_dict=feed_dict)
-                # print("Step: {}, loss: {}, mse: {}".format(i, s_loss, s_mse))
 
                 if i % 100 == 0:
                     sess.run(reset_metrics_op)
@@ -579,6 +577,10 @@ class Dcscn:
             updates_op = tf.group(*updates)
 
             return results, updates_op
+
+    def summary(self, output, labels):
+        tf.summary.image("ground_truth", labels)
+        tf.summary.image("output", output)
 
     def _prepare_metrics(self, metrics_ops_dict):
         """Create summary_op and placeholders for training metrics.
